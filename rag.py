@@ -1,5 +1,6 @@
 import chromadb
 import PyPDF2
+import docx
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 
@@ -9,12 +10,25 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 client = chromadb.Client()
 collection = client.get_or_create_collection("resume")
 
-def load_resume(pdf_path):
+def load_resume(file_path, file_type):
     text = ""
-    with open(pdf_path, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
-        for page in reader.pages:
-            text += page.extract_text()
+    if file_type == "pdf":
+        with open(file_path, "rb") as f:
+            reader = PyPDF2.PdfReader(f)
+            for page in reader.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted
+    elif file_type == "docx":
+        doc = docx.Document(file_path)
+        for paragraph in doc.paragraphs:
+            if paragraph.text.strip():
+                text += paragraph.text + "\n"
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    if cell.text.strip():
+                        text += cell.text + "\n"
     return text
 
 def chunk_text(text, chunk_size=500):
@@ -25,8 +39,8 @@ def chunk_text(text, chunk_size=500):
         chunks.append(chunk)
     return chunks
 
-def index_resume(pdf_path):
-    text = load_resume(pdf_path)
+def index_resume(file_path, file_type):
+    text = load_resume(file_path, file_type)
     chunks = chunk_text(text)
     embeddings = model.encode(chunks).tolist()
     collection.upsert(
